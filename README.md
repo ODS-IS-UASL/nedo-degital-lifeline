@@ -1,4 +1,4 @@
-# dem-vt-proxy
+# nedo-degital-lifeline
 
 DEMだけじゃなくてジオイドも対応しています。
 
