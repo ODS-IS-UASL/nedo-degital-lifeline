@@ -55,7 +55,7 @@
 
 <body>
   <div id="sidebar">
-    <div><label><input type="checkbox" id="wind-layer-toggle" checked> 風速タイル（気象協会: 2024/1/1 10:00 標高150mデータ使用）</label></div>
+    <div><label><input type="checkbox" id="wind-layer-toggle"> 風速タイル（気象協会: 2024/1/1 10:00 標高150mデータ使用）</label></div>
     <div><label><input type="checkbox" id="dem-3d-toggle"> 標高の立体表示（<a href="https://service.gsi.go.jp/kiban/app/help/#digital_elevation_model">国土地理院 数値標高モデルDEM10Bを使用</a>）</label></div>
   </div>
 
@@ -116,7 +116,8 @@
         id: 'wind-layer',
         type: 'raster',
         source: 'wind',
-        paint: { 'raster-opacity': 0.7 }
+        paint: { 'raster-opacity': 0.7 },
+        layout: { visibility: 'none' }
       });
 
       map.addSource('dem-hillshade', {
@@ -228,8 +229,7 @@
         };
 
         img.onerror = (error) => {
-          console.error('Error loading tile:', error);
-          reject(null);
+          resolve(null);
         };
 
         img.src = tileUrl;
@@ -271,6 +271,25 @@
       url.searchParams.set('z', zoom);
       const resp = await fetch(url.toString());
       const body = await resp.json();
+
+      map.getSource('cross-section').setData(body.geojsonCubes);
+
+      let lastFeatureId;
+      const handleHover = (evt, items, legend) => {
+        if (items.length < 1) return;
+        const theCube = body.geojsonCubes.features[items[0].index];
+        if (lastFeatureId) {
+          map.removeFeatureState({
+            id: lastFeatureId,
+            source: 'cross-section'
+          }, 'hover');
+        }
+        lastFeatureId = theCube.id;
+        map.setFeatureState({
+          id: theCube.id,
+          source: 'cross-section'
+        }, { hover: true });
+      };
 
       for (let i = 0; i < body.annotatedPoints.length; i++) {
         const point = body.annotatedPoints[i];
