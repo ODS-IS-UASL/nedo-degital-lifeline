@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GSI-DEM + WindSpeed Cross Section</title>
+  <style>
+    html, body {
+      height: 100vh;
+      width: 100vw;
+      padding: 0;
+      margin: 0;
+      position: relative;
+    }
+    #map-container {
+      width: 100vw;
+      height: 80vh;
+      position: relative;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    #hover-stats {
+      position: absolute;
+      top: 0;
+      left: 0;
+      background-color: #fff;
+      padding: 4px 10px;
+    }
+    #cross-section {
+      width: 100vw;
+      height: 20vh;
+    }
+    #reat-range-container {
+      height: 38px;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      text-align: center;
+    }
+    #data-toggle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: white;
+      padding: 6px;
+      z-index: 10;
+    }
+  </style>
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.3.0/mapbox-gl-draw.css" />
+</head>
+
+<body>
+  <div id="map-container">
+    <div id="map" data-gesture-handling="off" data-marker="off" data-style="./cross-section-multi-style.json"></div>
+    <div id="reat-range-container">
+      <input id="range-controller" type="range" min="0" max="12" defaultValue="12" />
+      <span id="range-indicator">12</span>
+    </div>
+    <div id="data-toggle">
+      <label><input type="radio" name="data-type" value="elevation" checked> 標高</label>
+      <label><input type="radio" name="data-type" value="windspeed"> 風速</label>
+    </div>
+  </div>
+  <div id="hover-stats">
+    <div id="current-pos"></div>
+    <div id="current-alt"></div>
+  </div>
+  <div id="cross-section">
+    <canvas id="cross-section-chart"></canvas>
+  </div>
+
+  <script src="https://cdn.geolonia.com/v1/embed?geolonia-api-key=YOUR-API-KEY"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.3.0/mapbox-gl-draw.js"></script>
+  <script type="module">
+    import tilebelt from "./tilebelt.js";
+
+    const WIND_TILE_URL = 'https://geolonia.github.io/windspeed-tile-script/index_value/tiles_red_rgb/{z}/{x}/{y}.png';
+    let currentZoom = 12;
+    let currentDataType = 'elevation';
+    const rangeController = document.getElementById("range-controller");
+    const rangeIndicator = document.getElementById("range-indicator");
+
+    const map = new geolonia.Map({
+      container : '#map',
+      center: [137.8346, 35.0212],
+      zoom: 10,
+      hash: true,
+    });
+    window._mainMap = map;
+
+    map.on('load', function() {
+      const newZoom = Math.round(map.getZoom()) + 5;
+      currentZoom = rangeController.value = rangeIndicator.innerHTML = newZoom;
+
+      map.addSource('wind', {
+        type: 'raster',
+        tiles: [WIND_TILE_URL],
+        tileSize: 256
+      });
+
+      map.addLayer({
+        id: 'wind-layer',
+        type: 'raster',
+        source: 'wind',
+        paint: { 'raster-opacity': 0.7 }
+      });
+    });
+
+    map.on('zoomend', function() {
+      const newZoom = Math.round(map.getZoom()) + 5;
+      currentZoom = rangeController.value = rangeIndicator.innerHTML = newZoom;
+    });
+
+    const draw = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: { line_string: true },
+      defaultMode: 'draw_line_string',
+      styles: [{
+        "id": "gl-draw-line",
+        "type": "line",
+        "filter": ["all", ["==", "$type", "LineString"], ["!=", "mode", "static"]],
+        "layout": { "line-cap": "round", "line-join": "round" },
+        "paint": {
+          "line-color": "#D20C0C",
+          "line-dasharray": [0.2, 2],
+          "line-width": 4
+        }
+      }]
+    });
+    map.addControl(draw, 'top-right');
+
+    map.on('draw.create', drawHandler);
+    map.on('draw.update', drawHandler);
+
+    function drawHandler({features}) {
+      const id = features[0].id;
+      draw.getAll().features.map(f => f.id).filter(i => i !== id).forEach(id => draw.delete(id));
+      generateCrossSection(currentZoom, features[0].geometry.coordinates);
+    }
+
+    function rangeChangeHandler() {
+      rangeIndicator.innerHTML = rangeController.value;
+      currentZoom = parseInt(rangeController.value, 10);
+      if (draw.getAll().features[0]) {
+        generateCrossSection(currentZoom, draw.getAll().features[0].geometry.coordinates);
+      }
+    }
+    rangeController.addEventListener("mouseup", rangeChangeHandler);
+    rangeController.addEventListener("touchend", rangeChangeHandler);
+
+    document.querySelectorAll('input[name="data-type"]').forEach((radio) => {
+      radio.addEventListener('change', (e) => {
+        currentDataType = e.target.value;
+        if (window._lastAnnotatedPoints) {
+          updateChart(window._lastAnnotatedPoints);
+        }
+      });
+    });
+
+    function getMaxWindFromTile(zoom, x, y, url) {
+      const tileUrl = url.replace('{z}', zoom).replace('{x}', x).replace('{y}', y);
+      return new Promise((resolve, reject) => {
+        const tileSize = 256;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = tileSize;
+          canvas.height = tileSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, tileSize, tileSize).data;
+
+          let maxR = 0;
+          for (let i = 0; i < imageData.length; i += 4) {
+            const r = imageData[i];
+            if (r === 255) continue;
+            if (r > maxR) maxR = r;
+          }
+
+          resolve(maxR === 0 ? null : maxR === 254 ? 9999 : (maxR / 10));
+        };
+
+        img.onerror = (error) => {
+          console.error('Error loading tile:', error);
+          reject(null);
+        };
+
+        img.src = tileUrl;
+      });
+    }
+
+    function updateChart(annotatedPoints) {
+      const ctx = document.getElementById('cross-section-chart').getContext('2d');
+      if (window._currentChart) window._currentChart.destroy();
+
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: annotatedPoints.map((x, i) => i),
+          datasets: [{
+            label: currentDataType === 'elevation' ? '標高 (m)' : '風速 (m/s)',
+            data: annotatedPoints.map((x) => currentDataType === 'elevation' ? x[2] / 100 : x[4]),
+            borderColor: currentDataType === 'elevation' ? 'blue' : 'red',
+            fill: false
+          }]
+        },
+        options: {
+          scales: { y: { beginAtZero: true } },
+          maintainAspectRatio: false,
+        }
+      });
+
+      window._currentChart = chart;
+    }
+
+    async function generateCrossSection(zoom, lineString) {
+      const pointsAtZoom = lineString.map(point => {
+        const tile = tilebelt.pointToTile(point[0], point[1], zoom);
+        return [tile[0], tile[1]];
+      });
+
+      const url = new URL('https://o3mc94v2u1.execute-api.ap-northeast-1.amazonaws.com/jgsi-dem/cross-section');
+      url.searchParams.set('line', pointsAtZoom.map(p => p.join(',')).join(';'));
+      url.searchParams.set('z', zoom);
+      const resp = await fetch(url.toString());
+      const body = await resp.json();
+
+      let lastFeatureId;
+      const handleHover = (evt, items, legend) => {
+        if (items.length < 1) return;
+        const theCube = body.geojsonCubes.features[items[0].index];
+        if (lastFeatureId) {
+          map.removeFeatureState({
+            id: lastFeatureId,
+            source: 'cross-section'
+          }, 'hover');
+        }
+        lastFeatureId = theCube.id;
+        map.setFeatureState({
+          id: theCube.id,
+          source: 'cross-section'
+        }, { hover: true });
+      };
+
+      map.getSource('cross-section').setData(body.geojsonCubes);
+
+      for (let i = 0; i < body.annotatedPoints.length; i++) {
+        const point = body.annotatedPoints[i];
+        const windSpeed = await getMaxWindFromTile(zoom, point[0], point[1], WIND_TILE_URL);
+        body.annotatedPoints[i].push(windSpeed);
+      }
+
+      window._lastAnnotatedPoints = body.annotatedPoints;
+      updateChart(body.annotatedPoints);
+    }
+  </script>
+</body>
+</html>
