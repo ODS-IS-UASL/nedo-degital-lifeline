@@ -9,6 +9,7 @@
       padding: 0;
       margin: 0;
       position: relative;
+      font-family: sans-serif;
     }
     #map-container {
       width: 100vw;
@@ -38,35 +39,43 @@
       bottom: 0;
       text-align: center;
     }
-    #data-toggle {
+    #sidebar {
       position: absolute;
-      top: 0;
-      right: 0;
+      top: 10px;
+      left: 10px;
       background: white;
-      padding: 6px;
-      z-index: 10;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.2);
+      z-index: 20;
     }
   </style>
   <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.3.0/mapbox-gl-draw.css" />
 </head>
 
 <body>
+  <div id="sidebar">
+    <div><label><input type="checkbox" id="wind-layer-toggle" checked> 風速タイル（気象協会: 2024/1/1 10:00 標高150mデータ使用）</label></div>
+    <div><label><input type="checkbox" id="dem-3d-toggle"> 標高の立体表示（<a href="https://service.gsi.go.jp/kiban/app/help/#digital_elevation_model">国土地理院 数値標高モデルDEM10Bを使用</a>）</label></div>
+  </div>
+
   <div id="map-container">
     <div id="map" data-gesture-handling="off" data-marker="off" data-style="./cross-section-multi-style.json"></div>
     <div id="reat-range-container">
-      <input id="range-controller" type="range" min="0" max="12" defaultValue="12" />
+      <input id="range-controller" type="range" min="8" max="12" value="12" />
       <span id="range-indicator">12</span>
     </div>
-    <div id="data-toggle">
-      <label><input type="radio" name="data-type" value="elevation" checked> 標高</label>
-      <label><input type="radio" name="data-type" value="windspeed"> 風速</label>
-    </div>
   </div>
+
   <div id="hover-stats">
     <div id="current-pos"></div>
     <div id="current-alt"></div>
   </div>
   <div id="cross-section">
+    <div id="data-toggle" style="margin-top: 10px;">
+      <label><input type="radio" name="data-type" value="elevation" checked> 標高</label>
+      <label><input type="radio" name="data-type" value="windspeed"> 風速</label>
+    </div>
     <canvas id="cross-section-chart"></canvas>
   </div>
 
@@ -80,6 +89,7 @@
     const WIND_TILE_URL = 'https://geolonia.github.io/windspeed-tile-script/index_value/tiles_red_rgb/{z}/{x}/{y}.png';
     let currentZoom = 12;
     let currentDataType = 'elevation';
+
     const rangeController = document.getElementById("range-controller");
     const rangeIndicator = document.getElementById("range-indicator");
 
@@ -92,8 +102,9 @@
     window._mainMap = map;
 
     map.on('load', function() {
-      const newZoom = Math.round(map.getZoom()) + 5;
-      currentZoom = rangeController.value = rangeIndicator.innerHTML = newZoom;
+      // const newZoom = Math.round(map.getZoom()) + 5;
+      currentZoom = rangeController.value
+      rangeIndicator.innerHTML = currentZoom;
 
       map.addSource('wind', {
         type: 'raster',
@@ -107,11 +118,27 @@
         source: 'wind',
         paint: { 'raster-opacity': 0.7 }
       });
+
+      map.addSource('dem-hillshade', {
+        type: 'raster-dem',
+        url: 'https://tileserver.geolonia.com/gsi-dem/tiles.json?key=YOUR-API-KEY',
+        tileSize: 256,
+        attribution: '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>'
+      });
+
+      map.addLayer({
+        id: 'dem-3d-layer',
+        type: 'hillshade',
+        source: 'dem-hillshade',
+        layout: { visibility: 'none' }
+      });
+
+      map.setTerrain(null); // 初期は terrain 無効
     });
 
     map.on('zoomend', function() {
-      const newZoom = Math.round(map.getZoom()) + 5;
-      currentZoom = rangeController.value = rangeIndicator.innerHTML = newZoom;
+      currentZoom = rangeController.value
+      rangeIndicator.innerHTML = currentZoom;
     });
 
     const draw = new MapboxDraw({
@@ -131,7 +158,6 @@
       }]
     });
     map.addControl(draw, 'top-right');
-
     map.on('draw.create', drawHandler);
     map.on('draw.update', drawHandler);
 
@@ -158,6 +184,22 @@
           updateChart(window._lastAnnotatedPoints);
         }
       });
+    });
+
+    // ✅ wind layer ON/OFF
+    document.getElementById("wind-layer-toggle").addEventListener("change", (e) => {
+      map.setLayoutProperty('wind-layer', 'visibility', e.target.checked ? 'visible' : 'none');
+    });
+
+    // ✅ hillshade + terrain 両方ON/OFF
+    document.getElementById("dem-3d-toggle").addEventListener("change", (e) => {
+      if (e.target.checked) {
+        map.setLayoutProperty('dem-3d-layer', 'visibility', 'visible');
+        map.setTerrain({ source: 'dem-hillshade', exaggeration: 1.5 });
+      } else {
+        map.setLayoutProperty('dem-3d-layer', 'visibility', 'none');
+        map.setTerrain(null);
+      }
     });
 
     function getMaxWindFromTile(zoom, x, y, url) {
@@ -229,25 +271,6 @@
       url.searchParams.set('z', zoom);
       const resp = await fetch(url.toString());
       const body = await resp.json();
-
-      let lastFeatureId;
-      const handleHover = (evt, items, legend) => {
-        if (items.length < 1) return;
-        const theCube = body.geojsonCubes.features[items[0].index];
-        if (lastFeatureId) {
-          map.removeFeatureState({
-            id: lastFeatureId,
-            source: 'cross-section'
-          }, 'hover');
-        }
-        lastFeatureId = theCube.id;
-        map.setFeatureState({
-          id: theCube.id,
-          source: 'cross-section'
-        }, { hover: true });
-      };
-
-      map.getSource('cross-section').setData(body.geojsonCubes);
 
       for (let i = 0; i < body.annotatedPoints.length; i++) {
         const point = body.annotatedPoints[i];
