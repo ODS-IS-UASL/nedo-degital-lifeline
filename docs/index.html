@@ -111,32 +111,11 @@
       currentZoom = rangeController.value
       rangeIndicator.innerHTML = currentZoom;
 
-      map.addSource('wind', {
-        type: 'raster',
-        tiles: [WIND_TILE_URL],
-        tileSize: 256
-      });
-
-      map.addLayer({
-        id: 'wind-layer',
-        type: 'raster',
-        source: 'wind',
-        paint: { 'raster-opacity': 0.7 },
-        layout: { visibility: 'none' }
-      });
-
       map.addSource('dem-hillshade', {
         type: 'raster-dem',
         url: 'https://tileserver.geolonia.com/gsi-dem/tiles.json?key=YOUR-API-KEY',
         tileSize: 256,
         attribution: '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>'
-      });
-
-      map.addLayer({
-        id: 'dem-3d-layer',
-        type: 'hillshade',
-        source: 'dem-hillshade',
-        layout: { visibility: 'none' }
       });
 
       map.setTerrain(null); // 初期は terrain 無効
@@ -201,7 +180,7 @@
     document.getElementById("dem-3d-toggle").addEventListener("change", (e) => {
       if (e.target.checked) {
         map.setLayoutProperty('dem-3d-layer', 'visibility', 'visible');
-        map.setTerrain({ source: 'dem-hillshade', exaggeration: 1.5 });
+        map.setTerrain({ source: 'dem', exaggeration: 1.5 });
       } else {
         map.setLayoutProperty('dem-3d-layer', 'visibility', 'none');
         map.setTerrain(null);

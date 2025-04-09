@@ -27,6 +27,11 @@
     "cross-section": {
       "type": "geojson",
       "data": { "type": "FeatureCollection", "features": [] }
+    },
+    "wind": {
+      "type": "raster",
+      "tiles": ["https://geolonia.github.io/windspeed-tile-script/index_value/tiles_red_rgb/{z}/{x}/{y}.png"],
+      "tileSize": 256
     }
   },
   "sprite": "https://geoloniamaps.github.io/gsi/gsi",
@@ -7677,6 +7682,31 @@
         "text-color": "#333",
         "text-halo-width": 1.2,
         "text-halo-color": "rgba(255,255,255,0.8)"
+      }
+    },
+    {
+      "id": "dem-3d-layer",
+      "type": "hillshade",
+      "source": "dem",
+      "layout": {
+        "visibility": "none"
+      },
+      "paint": {
+        "hillshade-exaggeration": 0.5,
+        "hillshade-shadow-color": "rgba(0, 0, 0, 0.5)",
+        "hillshade-highlight-color": "#ffffff",
+        "hillshade-accent-color": "#ffffff"
+      }
+    },
+    {
+      "id": "wind-layer",
+      "type": "raster",
+      "source": "wind",
+      "paint": {
+        "raster-opacity": 0.7
+      },
+      "layout": {
+        "visibility": "none"
       }
     },
     {
