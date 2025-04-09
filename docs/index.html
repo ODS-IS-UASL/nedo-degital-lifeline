@@ -30,6 +30,7 @@
     #cross-section {
       width: 100vw;
       height: 20vh;
+      position: relative;
     }
     #reat-range-container {
       height: 38px;
@@ -48,6 +49,11 @@
       border-radius: 8px;
       box-shadow: 0 0 6px rgba(0,0,0,0.2);
       z-index: 20;
+    }
+    #data-toggle {
+      position: absolute;
+      top: 5px;
+      left: 5px;
     }
   </style>
   <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.3.0/mapbox-gl-draw.css" />
@@ -72,7 +78,7 @@
     <div id="current-alt"></div>
   </div>
   <div id="cross-section">
-    <div id="data-toggle" style="margin-top: 10px;">
+    <div id="data-toggle">
       <label><input type="radio" name="data-type" value="elevation" checked> 標高</label>
       <label><input type="radio" name="data-type" value="windspeed"> 風速</label>
     </div>
