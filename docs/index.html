@@ -107,7 +107,6 @@
     window._mainMap = map;
 
     map.on('load', function() {
-      // const newZoom = Math.round(map.getZoom()) + 5;
       currentZoom = rangeController.value
       rangeIndicator.innerHTML = currentZoom;
 
@@ -118,7 +117,7 @@
         attribution: '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>'
       });
 
-      map.setTerrain(null); // 初期は terrain 無効
+      map.setTerrain(null);
     });
 
     map.on('zoomend', function() {
@@ -171,12 +170,12 @@
       });
     });
 
-    // ✅ wind layer ON/OFF
+    // wind layer ON/OFF
     document.getElementById("wind-layer-toggle").addEventListener("change", (e) => {
       map.setLayoutProperty('wind-layer', 'visibility', e.target.checked ? 'visible' : 'none');
     });
 
-    // ✅ hillshade + terrain 両方ON/OFF
+    // hillshade + terrain ON/OFF
     document.getElementById("dem-3d-toggle").addEventListener("change", (e) => {
       if (e.target.checked) {
         map.setLayoutProperty('dem-3d-layer', 'visibility', 'visible');
