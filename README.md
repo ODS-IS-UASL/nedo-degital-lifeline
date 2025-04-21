@@ -22,4 +22,4 @@
 - 標高：[国土地理院 数値標高モデルDEM10Bを使用](https://service.gsi.go.jp/kiban/app/help/#digital_elevation_model)
 
 ## 注意事項
-^ 本リポジトリに含まれる scripts/apiRequests.sh は、外部APIを呼び出すためのスクリプトです。実行するには、APIキーやアクセストークンが必要です。
+- 本リポジトリに含まれる scripts/apiRequests.sh は、外部APIを呼び出すためのスクリプトです。実行するには、APIキーやアクセストークンが必要です。
